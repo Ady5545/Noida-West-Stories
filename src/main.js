@@ -30,6 +30,7 @@ let cameraYaw=0;
 let cameraPitch=-0.18;
 let cameraDistanceTarget=6.4;
 let cameraDistance=6.4;
+let cameraZoomOffset=0;
 let cameraYawVelocity=0;
 let cameraPitchVelocity=0;
 let lastCameraInput=0;
@@ -383,7 +384,9 @@ function updateCamera(dt){
   const speed01=THREE.MathUtils.clamp(Math.abs(carSpeed)/28,0,1);
   const baseDistance=inCar?8.1:6.4;
   const speedExtension=inCar?(2.4*speed01):0;
-  const desiredDistance=Math.max(3.4,baseDistance+speedExtension);
+  const zoomMin=inCar?5.2:3.4;
+  const zoomMax=inCar?12.5:9.5;
+  const desiredDistance=THREE.MathUtils.clamp(baseDistance+speedExtension+cameraZoomOffset,zoomMin,zoomMax);
   cameraDistanceTarget += (desiredDistance-cameraDistanceTarget)*(1-Math.exp(-4.5*dt));
   cameraDistance += (cameraDistanceTarget-cameraDistance)*(1-Math.exp(-7*dt));
 
@@ -518,10 +521,10 @@ renderer.domElement.addEventListener('lostpointercapture',e=>{
 renderer.domElement.addEventListener('wheel',e=>{
   if(!started||cameraMode==='first')return;
   const zoom=e.deltaY>0?1:-1;
-  cameraDistanceTarget=THREE.MathUtils.clamp(
-    cameraDistanceTarget+zoom*.7,
-    inCar?5.2:3.4,
-    inCar?12.5:9.5
+  cameraZoomOffset=THREE.MathUtils.clamp(
+    cameraZoomOffset+zoom*.7,
+    (inCar?5.2:3.4)-(inCar?8.1:6.4),
+    (inCar?12.5:9.5)-(inCar?8.1:6.4)
   );
   lastCameraInput=performance.now()/1000;
   e.preventDefault();
