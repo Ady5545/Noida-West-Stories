@@ -2,18 +2,17 @@
 
 Browser-first 3D open-world game prototype inspired by Greater Noida West.
 
-## Prototype 0.2
-- Third-person camera by default
+## Prototype 0.4
+- Third-person locked follow camera by default
 - First-person toggle (V)
-- Mouse-look
-- On-foot movement (WASD + sprint)
-- Enter/exit Cityrunner S1 (E)
-- Arcade car physics
-- **Real OpenStreetMap road network centered on Greater Noida West**
-- Pedestrian NPCs
-- Traffic positioned from live road geometry when map data loads
+- On-foot movement (WASD + turn)
+- Detailed procedural Cityrunner model
+- Detailed procedural pedestrian models
+- Streetlights and trees
+- Real OpenStreetMap road network clipped to a curated Greater Noida West gameplay boundary
+- Real OpenStreetMap building footprints extruded into 3D
+- Map data bundled during GitHub Pages deployment
 - Day/night clock
-- Static-browser architecture using Three.js from a pinned CDN
 - No Unity and no local install/build step
 
 ## Roadmap
