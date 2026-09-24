@@ -1,3 +1,4 @@
+import { loadOSMRoadNetwork } from './osm.js';
 import * as THREE from 'three';
 
 const scene=new THREE.Scene();
@@ -22,6 +23,9 @@ let timeOfDay=8;
 let playerYaw=0,playerPitch=-0.08;
 let carSpeed=0,carHeading=Math.PI*.5;
 let toastTimer=0;
+let mapReady=false;
+let mapSegments=[];
+let mapBounds={minX:-450,maxX:450,minZ:-450,maxZ:450};
 
 const ui={
   start:document.querySelector('#start-screen'),
@@ -62,34 +66,52 @@ function tree(x,z){
   crown.position.set(x,4.8,z);crown.castShadow=true;scene.add(crown);
 }
 
-box(520,1,520,0x6b756f,0,-.5,0);
+box(560,1,560,0x6b756f,0,-.5,0);
 
-const blockSpan=64,roadWidth=12;
-const roadMat=material(0x2d3035,.97);
-const lineMat=material(0xd3b65a,.8);
-for(let i=-4;i<=4;i++){
-  box(roadWidth,.08,520,roadMat,i*blockSpan,.03,0);
-  for(let z=-240;z<=240;z+=12) box(.16,.03,4,lineMat,i*blockSpan,.1,z);
-  box(520,.08,roadWidth,roadMat,0,.03,i*blockSpan);
-  for(let x=-240;x<=240;x+=12) box(4,.03,.16,lineMat,x,.1,i*blockSpan);
-}
-
-const palettes=[0xb8aa96,0xd0c0aa,0x8ea2ad,0xc79e7b,0x9d9aa3,0xb4bda9];
-for(let bx=-4;bx<4;bx++) for(let bz=-4;bz<4;bz++){
-  if((bx===0&&bz===0)||Math.random()<.14) continue;
-  const cx=bx*blockSpan+20+Math.random()*10,cz=bz*blockSpan+20+Math.random()*10;
-  const w=24+Math.random()*9,d=23+Math.random()*9,floors=3+Math.floor(Math.random()*8),h=floors*3.6;
-  box(w,h,d,palettes[(bx+bz+20)%palettes.length],cx,h/2,cz,{roughness:.96});
-  const winMat=new THREE.MeshStandardMaterial({color:0x78949e,roughness:.35,metalness:.1,emissive:0x0b1c23,emissiveIntensity:.15});
-  for(let floor=0;floor<floors;floor++) for(let wx=-2;wx<=2;wx++){
-    const w1=new THREE.Mesh(new THREE.BoxGeometry(1.3,1,.08),winMat);
-    w1.position.set(cx+wx*4.1,2.4+floor*3.6,cz-d/2-.06);scene.add(w1);
+function createFallbackGrid(){
+  const blockSpan=64,roadWidth=12;
+  const roadMat=material(0x2d3035,.97),lineMat=material(0xd3b65a,.8);
+  for(let i=-4;i<=4;i++){
+    box(roadWidth,.08,520,roadMat,i*blockSpan,.03,0);
+    for(let z=-240;z<=240;z+=12) box(.16,.03,4,lineMat,i*blockSpan,.1,z);
+    box(520,.08,roadWidth,roadMat,0,.03,i*blockSpan);
+    for(let x=-240;x<=240;x+=12) box(4,.03,.16,lineMat,x,.1,i*blockSpan);
   }
 }
-for(let i=0;i<90;i++){
-  const x=(Math.random()-.5)*430,z=(Math.random()-.5)*430;
-  if(Math.abs(x%blockSpan)<9||Math.abs(z%blockSpan)<9)continue;
-  tree(x,z);
+
+async function loadRealMap(){
+  ui.startButton.disabled=true;
+  ui.startButton.textContent='LOADING CITY…';
+  try{
+    const road=await loadOSMRoadNetwork();
+    scene.add(road.group);
+    mapSegments=road.segments;
+    mapBounds=road.bounds;
+    mapReady=true;
+
+    const nearest=road.segments
+      .slice()
+      .sort((a,b)=>a.midpoint.lengthSq()-b.midpoint.lengthSq())[0];
+
+    if(nearest){
+      car.position.set(nearest.midpoint.x,.66,nearest.midpoint.z);
+      carHeading=nearest.heading;
+      car.rotation.y=carHeading;
+      player.position.set(nearest.midpoint.x-2.8,0,nearest.midpoint.z+1.5);
+      playerYaw=carHeading;
+    }
+
+    ui.startButton.disabled=false;
+    ui.startButton.textContent='ENTER THE CITY';
+    document.querySelector('.start-note').textContent='Real OpenStreetMap road network loaded · Keyboard + mouse recommended';
+  }catch(error){
+    console.warn('OpenStreetMap load failed, using fallback map:',error);
+    createFallbackGrid();
+    mapReady=true;
+    ui.startButton.disabled=false;
+    ui.startButton.textContent='ENTER THE CITY';
+    document.querySelector('.start-note').textContent='Map service unavailable · fallback city loaded';
+  }
 }
 
 const player=new THREE.Group();
@@ -122,9 +144,9 @@ for(let i=0;i<28;i++){
 
 const traffic=[];
 for(let i=0;i<14;i++){
-  const t=box(1.5,.55,2.8,[0xd58d59,0x809ab2,0x9e9e9e,0x456d65][i%4],0,.38,0);
-  t.position.set((Math.random()-.5)*380,.38,Math.round((Math.random()*7-3.5))*blockSpan);
-  traffic.push({mesh:t,speed:5+Math.random()*7,axis:Math.random()>.5?'x':'z'});
+  const t=new THREE.Mesh(new THREE.BoxGeometry(1.5,.55,2.8),material([0xd58d59,0x809ab2,0x9e9e9e,0x456d65][i%4],.7,.1));
+  t.castShadow=true;scene.add(t);
+  traffic.push({mesh:t,speed:5+Math.random()*7,segment:null,t:Math.random(),direction:Math.random()>.5?1:-1,axis:'x'});
 }
 
 const keysDown=code=>keys.has(code);
@@ -163,8 +185,8 @@ function updatePlayer(dt){
     player.position.addScaledVector(dir,speed*dt);
     player.rotation.y=playerYaw;
   }
-  player.position.x=THREE.MathUtils.clamp(player.position.x,-248,248);
-  player.position.z=THREE.MathUtils.clamp(player.position.z,-248,248);
+  player.position.x=THREE.MathUtils.clamp(player.position.x,mapBounds.minX+2,mapBounds.maxX-2);
+  player.position.z=THREE.MathUtils.clamp(player.position.z,mapBounds.minZ+2,mapBounds.maxZ-2);
 }
 
 function updateCar(dt){
@@ -181,8 +203,8 @@ function updateCar(dt){
   car.rotation.y=carHeading;
   const forward=new THREE.Vector3(0,0,-1).applyAxisAngle(worldUp,carHeading);
   car.position.addScaledVector(forward,carSpeed*dt);
-  car.position.x=THREE.MathUtils.clamp(car.position.x,-248,248);
-  car.position.z=THREE.MathUtils.clamp(car.position.z,-248,248);
+  car.position.x=THREE.MathUtils.clamp(car.position.x,mapBounds.minX+2,mapBounds.maxX-2);
+  car.position.z=THREE.MathUtils.clamp(car.position.z,mapBounds.minZ+2,mapBounds.maxZ-2);
   ui.speed.textContent=Math.round(Math.abs(carSpeed)*3.6);
 }
 
@@ -197,10 +219,18 @@ function updateNPCs(dt){
 
 function updateTraffic(dt){
   for(const t of traffic){
-    if(t.axis==='x')t.mesh.position.x+=t.speed*dt;
-    else t.mesh.position.z+=t.speed*dt;
-    if(t.mesh.position.x>255)t.mesh.position.x=-255;
-    if(t.mesh.position.z>255)t.mesh.position.z=-255;
+    if(mapSegments.length){
+      if(!t.segment||t.t>1||t.t<0){
+        t.segment=mapSegments[Math.floor(Math.random()*mapSegments.length)];
+        t.t=Math.random();
+        t.direction=Math.random()>.5?1:-1;
+      }
+      const s=t.segment;
+      t.t+=dt*t.speed/Math.max(s.length,1)*t.direction;
+      const p=s.a.clone().lerp(s.b,THREE.MathUtils.clamp(t.t,0,1));
+      t.mesh.position.set(p.x,.38,p.z);
+      t.mesh.rotation.y=s.heading+(t.direction<0?Math.PI:0);
+    }
   }
 }
 
@@ -251,6 +281,7 @@ document.addEventListener('mousemove',e=>{
 });
 
 ui.startButton.addEventListener('click',()=>{
+  if(!mapReady){toast('The city map is still loading');return;}
   started=true;ui.start.classList.add('hidden');
   renderer.domElement.requestPointerLock?.();
   toast('Welcome to Noida West Stories');
@@ -270,4 +301,5 @@ function animate(){
   }else{camera.position.set(56,50,56);camera.lookAt(0,0,0);}
   renderer.render(scene,camera);
 }
+loadRealMap();
 animate();
