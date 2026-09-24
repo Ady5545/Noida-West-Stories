@@ -422,7 +422,7 @@ function updateCamera(dt){
   // Look slightly ahead of the character so the world opens up in the direction
   // of the orbit instead of staring at the exact center of the model.
   const lookTarget=cameraFollowPivot.clone()
-    .add(new THREE.Vector3(0,inCar?.35:.1,0))
+    .add(new THREE.Vector3(0,inCar ? .35 : .1,0))
     .addScaledVector(viewDirection,2.4);
 
   camera.lookAt(lookTarget);
