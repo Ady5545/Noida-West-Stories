@@ -17,6 +17,7 @@ document.querySelector('#game-root').appendChild(renderer.domElement);
 const gameClock=new THREE.Clock();
 const keys=new Set();
 const worldUp=new THREE.Vector3(0,1,0);
+const blockSpan=64;
 
 let started=false,inCar=false,cameraMode='third';
 let timeOfDay=8;
@@ -80,8 +81,8 @@ function createFallbackGrid(){
 }
 
 async function loadRealMap(){
-  ui.startButton.disabled=true;
-  ui.startButton.textContent='LOADING CITY…';
+  ui.startButton.disabled=false;
+  ui.startButton.textContent='LOADING MAP…';
   try{
     const road=await loadOSMRoadNetwork();
     scene.add(road.group);
@@ -93,7 +94,7 @@ async function loadRealMap(){
       .slice()
       .sort((a,b)=>a.midpoint.lengthSq()-b.midpoint.lengthSq())[0];
 
-    if(nearest){
+    if(nearest && !started){
       car.position.set(nearest.midpoint.x,.66,nearest.midpoint.z);
       carHeading=nearest.heading;
       car.rotation.y=carHeading;
@@ -102,14 +103,14 @@ async function loadRealMap(){
     }
 
     ui.startButton.disabled=false;
-    ui.startButton.textContent='ENTER THE CITY';
+    if(!started) ui.startButton.textContent='ENTER THE CITY';
     document.querySelector('.start-note').textContent='Real OpenStreetMap road network loaded · Keyboard + mouse recommended';
   }catch(error){
     console.warn('OpenStreetMap load failed, using fallback map:',error);
     createFallbackGrid();
     mapReady=true;
     ui.startButton.disabled=false;
-    ui.startButton.textContent='ENTER THE CITY';
+    if(!started) ui.startButton.textContent='ENTER THE CITY';
     document.querySelector('.start-note').textContent='Map service unavailable · fallback city loaded';
   }
 }
@@ -281,7 +282,6 @@ document.addEventListener('mousemove',e=>{
 });
 
 ui.startButton.addEventListener('click',()=>{
-  if(!mapReady){toast('The city map is still loading');return;}
   started=true;ui.start.classList.add('hidden');
   renderer.domElement.requestPointerLock?.();
   toast('Welcome to Noida West Stories');
