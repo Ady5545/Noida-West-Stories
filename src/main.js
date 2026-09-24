@@ -1,4 +1,5 @@
-import { loadBundledOSMRoadNetwork, loadOSMRoadNetwork } from './osm.js';
+import { loadBundledOSMRoadNetwork, loadOSMRoadNetwork, loadBundledOSMBuildingNetwork } from './osm.js';
+import { createCityrunner, createPedestrian, createTree, createStreetlight } from './models.js';
 import * as THREE from 'three';
 
 const scene=new THREE.Scene();
@@ -61,11 +62,6 @@ function box(w,h,d,color,x,y,z,opts={}){
   const m=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),material(color,opts.roughness??.85,opts.metalness??0));
   m.position.set(x,y,z);m.castShadow=true;m.receiveShadow=true;scene.add(m);return m;
 }
-function tree(x,z){
-  box(.7,4,.7,0x6b513f,x,2,z);
-  const crown=new THREE.Mesh(new THREE.IcosahedronGeometry(2.5,1),material(0x3f714a,1,0));
-  crown.position.set(x,4.8,z);crown.castShadow=true;scene.add(crown);
-}
 
 box(12000,1,12000,0x6b756f,0,-.5,0);
 
@@ -88,6 +84,21 @@ async function loadRealMap(){
     scene.add(road.group);
     mapSegments=road.segments;
     mapBounds=road.bounds;
+    try{
+      const buildings=await loadBundledOSMBuildingNetwork();
+      scene.add(buildings.group);
+      document.querySelector('.start-note').textContent='Greater Noida West map + mapped buildings loaded';
+    }catch(buildingError){
+      console.warn('Mapped building data unavailable:',buildingError);
+    }
+    for(let i=0;i<Math.min(70,mapSegments.length);i+=4){
+      const s=mapSegments[i];
+      if(!['primary','secondary','tertiary'].includes(s.highway))continue;
+      const lamp=createStreetlight();
+      lamp.position.set(s.midpoint.x,.1,s.midpoint.z);
+      lamp.rotation.y=s.heading;
+      scene.add(lamp);
+    }
     mapReady=true;
 
     const nearest=road.segments
@@ -138,31 +149,25 @@ async function loadRealMap(){
   }
 }
 
-const player=new THREE.Group();
+const player=createPedestrian(1);
 player.position.set(-8,0,8);
-const playerBody=new THREE.Mesh(new THREE.CapsuleGeometry(.34,.95,4,8),material(0x3e5a72,1,0));
-playerBody.position.y=1;playerBody.castShadow=true;player.add(playerBody);
-const playerHead=new THREE.Mesh(new THREE.SphereGeometry(.38,16,12),material(0xc9926f,1,0));
-playerHead.position.y=2.05;playerHead.castShadow=true;player.add(playerHead);
 scene.add(player);
 
-const car=new THREE.Group();
-car.position.set(5,.66,11);car.rotation.y=carHeading;scene.add(car);
-const body=new THREE.Mesh(new THREE.BoxGeometry(2.2,.72,4.2),material(0x2b66a0,.35,.35));
-body.castShadow=true;body.receiveShadow=true;car.add(body);
-const cabin=new THREE.Mesh(new THREE.BoxGeometry(1.85,.58,2.1),material(0x152430,.25,.15));
-cabin.position.y=.58;cabin.castShadow=true;car.add(cabin);
-const wheelGeo=new THREE.CylinderGeometry(.48,.48,.26,16),wheelMat=material(0x15181a,.9,0);
-for(const x of[-1,1])for(const z of[-1.45,1.45]){
-  const w=new THREE.Mesh(wheelGeo,wheelMat);w.rotation.z=Math.PI/2;w.position.set(x*.98,-.2,z);w.castShadow=true;car.add(w);
-}
+const car=createCityrunner();
+car.position.set(5,.66,11);
+car.rotation.y=carHeading;
+scene.add(car);
 
 const npcs=[];
-for(let i=0;i<28;i++){
-  const n=new THREE.Group();
-  n.position.set((Math.floor(Math.random()*8)-4)*blockSpan+(Math.random()-.5)*8,0,(Math.floor(Math.random()*8)-4)*blockSpan+(Math.random()-.5)*8);
-  const m=new THREE.Mesh(new THREE.CapsuleGeometry(.27,.75,4,8),material([0x526f58,0x8a5e48,0x725b7b,0x444e5a][i%4],1,0));
-  m.position.y=.78;m.castShadow=true;n.add(m);scene.add(n);
+for(let i=0;i<22;i++){
+  const n=createPedestrian(i+2);
+  n.position.set(
+    (Math.floor(Math.random()*8)-4)*blockSpan+(Math.random()-.5)*8,
+    0,
+    (Math.floor(Math.random()*8)-4)*blockSpan+(Math.random()-.5)*8
+  );
+  n.scale.setScalar(.86+Math.random()*.1);
+  scene.add(n);
   npcs.push({mesh:n,angle:Math.random()*Math.PI*2,speed:.45+Math.random()*.6});
 }
 
