@@ -1,4 +1,4 @@
-import { loadBundledOSMRoadNetwork, loadOSMRoadNetwork, loadBundledOSMBuildingNetwork } from './osm.js';
+import { loadBundledOSMRoadNetwork, loadOSMRoadNetwork, loadBundledOSMBuildingNetwork, loadOSMBuildingNetwork } from './osm.js';
 import { createCityrunner, createPedestrian, createTree, createStreetlight } from './models.js';
 import * as THREE from 'three';
 
@@ -94,9 +94,14 @@ async function loadRealMap(){
     try{
       const buildings=await loadBundledOSMBuildingNetwork();
       scene.add(buildings.group);
-      document.querySelector('.start-note').textContent='Greater Noida West map + mapped buildings loaded';
-    }catch(buildingError){
-      console.warn('Mapped building data unavailable:',buildingError);
+    }catch(buildingBundleError){
+      console.warn('Bundled building data unavailable; loading live OSM buildings:',buildingBundleError);
+      try{
+        const buildings=await loadOSMBuildingNetwork();
+        scene.add(buildings.group);
+      }catch(buildingError){
+        console.warn('Live OSM building data unavailable:',buildingError);
+      }
     }
     for(let i=0;i<Math.min(70,mapSegments.length);i+=4){
       const s=mapSegments[i];
