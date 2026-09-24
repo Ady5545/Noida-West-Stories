@@ -30,31 +30,47 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p src/data
+
           POLY='28.622 77.405 28.622 77.462 28.610 77.490 28.565 77.490 28.553 77.455 28.553 77.412 28.580 77.395'
 
           download() {
             local OUT="$1"
             local QUERY="$2"
+
             for ENDPOINT in "https://overpass-api.de/api/interpreter" "https://overpass.kumi.systems/api/interpreter"; do
               echo "Trying ${ENDPOINT} for ${OUT}"
+
               if curl --fail --retry 3 --retry-delay 2 --get \
                 --data-urlencode "data=${QUERY}" \
-                "${ENDPOINT}" > "${OUT}"; then
+                --output "${OUT}" \
+                "${ENDPOINT}"; then
                 test -s "${OUT}"
                 echo "Downloaded ${OUT}"
                 return 0
               fi
             done
+
+            echo "All Overpass endpoints failed for ${OUT}" >&2
             return 1
           }
 
-          ROAD_QUERY="[out:json][timeout:90];
-          way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service)$"](poly:"${POLY}");
-          out geom;"
+          ROAD_QUERY=$(cat <<EOF
+[out:json][timeout:90];
+(
+  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service)$"](poly:"${POLY}");
+);
+out geom;
+EOF
+)
 
-          BUILDING_QUERY="[out:json][timeout:90];
-          way["building"](poly:"${POLY}");
-          out geom;"
+          BUILDING_QUERY=$(cat <<EOF
+[out:json][timeout:90];
+(
+  way["building"](poly:"${POLY}");
+);
+out geom;
+EOF
+)
 
           download src/data/osm-roads.json "${ROAD_QUERY}"
           download src/data/osm-buildings.json "${BUILDING_QUERY}"
