@@ -111,6 +111,29 @@ export function createPedestrian(seed=0){
 
   const hair=new THREE.Mesh(new THREE.SphereGeometry(.285,16,8,0,Math.PI*2,0,Math.PI*.48),mat(0x2a221d,1,0));
   hair.position.y=2.1;g.add(hair);
+  const eyeWhite=mat(0xf4f1e8,.55,0);
+  const eyeDark=mat(0x171717,.45,0);
+  const mouthMat=mat(0x7a3f3f,.8,0);
+
+  for(const x of[-.105,.105]){
+    const eye=new THREE.Mesh(new THREE.SphereGeometry(.052,10,8),eyeWhite);
+    eye.position.set(x,2.04,-.245);g.add(eye);
+    const pupil=new THREE.Mesh(new THREE.SphereGeometry(.025,8,6),eyeDark);
+    pupil.position.set(x,2.04,-.291);g.add(pupil);
+    const brow=new THREE.Mesh(new THREE.BoxGeometry(.11,.025,.035),eyeDark);
+    brow.position.set(x,2.13,-.258);brow.rotation.z=x>0?-.08:.08;g.add(brow);
+  }
+
+  const nose=new THREE.Mesh(new THREE.ConeGeometry(.045,.13,8),skinMat);
+  nose.rotation.x=-Math.PI/2;nose.position.set(0,1.98,-.275);g.add(nose);
+
+  const mouth=new THREE.Mesh(new THREE.BoxGeometry(.12,.035,.025),mouthMat);
+  mouth.position.set(0,1.885,-.27);g.add(mouth);
+
+  for(const x of[-.285,.285]){
+    const ear=new THREE.Mesh(new THREE.SphereGeometry(.075,10,8),skinMat);
+    ear.scale.set(.7,1,1);ear.position.set(x,2.01,-.01);g.add(ear);
+  }
 
   for(const x of[-.4,.4]){
     const arm=new THREE.Mesh(new THREE.CapsuleGeometry(.11,.55,5,8),shirtMat);
