@@ -117,6 +117,21 @@ function addRoadMarkings(group,segments){
   group.add(new THREE.LineSegments(g,new THREE.LineBasicMaterial({color:0xd4bd6a,transparent:true,opacity:.7})));
 }
 
+function parseRoadJson(json){
+  const ways=(json.elements??[]).filter(e=>e.type==='way'&&e.geometry?.length>1);
+  if(!ways.length)throw new Error('No road geometry returned');
+  const road=makeRoadMesh(ways);
+  addRoadMarkings(road.group,road.segments);
+  road.group.name='OpenStreetMap Roads';
+  return {...road,center:CENTER,bbox:BBOX,source:'OpenStreetMap contributors'};
+}
+
+export async function loadBundledOSMRoadNetwork(){
+  const response=await fetch('./src/data/osm-roads.json',{cache:'no-store'});
+  if(!response.ok)throw new Error(`Bundled map HTTP ${response.status}`);
+  return parseRoadJson(await response.json());
+}
+
 export async function loadOSMRoadNetwork(){
   const query=`[out:json][timeout:35];
 (
@@ -134,19 +149,7 @@ out geom;
         body:new URLSearchParams({data:query})
       });
       if(!response.ok)throw new Error(`Overpass HTTP ${response.status}`);
-      const json=await response.json();
-      const ways=(json.elements??[]).filter(e=>e.type==='way'&&e.geometry?.length>1);
-      if(!ways.length)throw new Error('No road geometry returned');
-
-      const road=makeRoadMesh(ways);
-      addRoadMarkings(road.group,road.segments);
-      road.group.name='OpenStreetMap Roads';
-      return {
-        ...road,
-        center:CENTER,
-        bbox:BBOX,
-        source:'OpenStreetMap contributors'
-      };
+      return parseRoadJson(await response.json());
     }catch(error){
       lastError=error;
     }
