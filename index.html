@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#10151d">
+  <title>Noida West Stories</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div id="game-root"></div>
+
+  <div id="hud">
+    <div class="brand">NOIDA WEST STORIES <span>PROTO 0.1</span></div>
+    <div class="status-row">
+      <div class="pill"><span class="dot"></span><span>Westside Starter District</span></div>
+      <div class="pill">Camera: <strong id="camera-mode">THIRD</strong></div>
+      <div class="pill">Clock: <strong id="clock">08:00</strong></div>
+    </div>
+    <div id="notice" class="notice hidden"></div>
+  </div>
+
+  <div id="crosshair">+</div>
+
+  <div id="vehicle-hud" class="vehicle-hud hidden">
+    <div class="vehicle-name">CITYRUNNER S1</div>
+    <div class="speed"><span id="speed">0</span> <small>KM/H</small></div>
+    <div class="vehicle-help">W/S throttle · A/D steer · Space brake · E exit</div>
+  </div>
+
+  <div id="controls" class="controls">
+    <div class="controls-title">CONTROLS</div>
+    <div><kbd>W A S D</kbd> move / drive</div>
+    <div><kbd>Shift</kbd> sprint</div>
+    <div><kbd>Mouse</kbd> look</div>
+    <div><kbd>V</kbd> third ↔ first</div>
+    <div><kbd>E</kbd> enter / exit</div>
+    <div><kbd>Space</kbd> brake</div>
+  </div>
+
+  <div id="start-screen" class="start-screen">
+    <div class="start-card">
+      <div class="eyebrow">GREATER NOIDA WEST · BROWSER PROTOTYPE</div>
+      <h1>Noida West<br><span>Stories</span></h1>
+      <p>Walk the starter district, hop into the Cityrunner S1 and cruise the streets.</p>
+      <button id="start-button">ENTER THE CITY</button>
+      <div class="start-note">Keyboard + mouse recommended · No Unity · No download</div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
