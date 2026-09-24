@@ -15,6 +15,7 @@ const GAME_POLYGON=[
   [28.553,77.412],
   [28.580,77.395]
 ];
+const GAME_POLYGON_QUERY=GAME_POLYGON.map(([lat,lon])=>lat+' '+lon).join(' ');
 const M_PER_DEG_LAT=111320;
 const M_PER_DEG_LON=M_PER_DEG_LAT*Math.cos(CENTER.lat*Math.PI/180);
 
@@ -148,7 +149,7 @@ export async function loadBundledOSMRoadNetwork(){
 export async function loadOSMRoadNetwork(){
   const query=`[out:json][timeout:35];
 (
-  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service)$"](${BBOX.south},${BBOX.west},${BBOX.north},${BBOX.east});
+  way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service)$"](poly:"${GAME_POLYGON_QUERY}");
 );
 out geom;
 `;
