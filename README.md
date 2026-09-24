@@ -11,6 +11,7 @@ Browser-first 3D open-world game prototype inspired by Greater Noida West.
 - Streetlights and trees
 - Real OpenStreetMap road network clipped to a curated Greater Noida West gameplay boundary
 - Real OpenStreetMap building footprints extruded into 3D
+- GTA-style spring-orbit camera feel with collision and auto-recenter
 - Map data bundled during GitHub Pages deployment
 - Day/night clock
 - No Unity and no local install/build step
