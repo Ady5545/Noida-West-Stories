@@ -253,6 +253,30 @@ export function createOSMBuildingGroup(json){
   return {group,count:max};
 }
 
+export async function loadOSMBuildingNetwork(){
+  const query='[out:json][timeout:45];\n'+
+    '(\n'+
+    '  way["building"](poly:"'+GAME_POLYGON_QUERY+'");\n'+
+    ');\n'+
+    'out geom;\n';
+
+  let lastError;
+  for(const endpoint of OVERPASS){
+    try{
+      const response=await fetch(endpoint,{
+        method:'POST',
+        headers:{'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'},
+        body:new URLSearchParams({data:query})
+      });
+      if(!response.ok)throw new Error('Overpass building HTTP '+response.status);
+      return createOSMBuildingGroup(await response.json());
+    }catch(error){
+      lastError=error;
+    }
+  }
+  throw lastError??new Error('Unable to load OpenStreetMap building data');
+}
+
 export async function loadBundledOSMBuildingNetwork(){
   const response=await fetch('./src/data/osm-buildings.json',{cache:'no-store'});
   if(!response.ok)throw new Error(`Bundled building map HTTP ${response.status}`);
