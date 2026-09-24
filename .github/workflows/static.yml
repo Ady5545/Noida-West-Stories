@@ -1,28 +1,21 @@
-# Simple workflow for deploying static content to GitHub Pages
+# Build and deploy Noida West Stories to GitHub Pages
 name: Deploy static content to Pages
 
 on:
-  # Runs on pushes targeting the default branch
   push:
     branches: ["main"]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
-  # Single deploy job since we're just deploying
   deploy:
     environment:
       name: github-pages
@@ -31,13 +24,37 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Download Greater Noida West road data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p src/data
+          QUERY='[out:json][timeout:90];
+          (
+            way["highway"~"^(motorway|trunk|primary|secondary|tertiary|unclassified|residential|living_street|service)$"](28.565,77.390,28.645,77.490);
+          );
+          out geom;'
+          for ENDPOINT in "https://overpass-api.de/api/interpreter" "https://overpass.kumi.systems/api/interpreter"; do
+            echo "Trying ${ENDPOINT}"
+            if curl --fail --retry 3 --retry-delay 2 --get \
+              --data-urlencode "data=${QUERY}" \
+              "${ENDPOINT}" > src/data/osm-roads.json; then
+              test -s src/data/osm-roads.json
+              echo "OSM road data downloaded."
+              break
+            fi
+          done
+          test -s src/data/osm-roads.json
+
       - name: Setup Pages
         uses: actions/configure-pages@v5
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload entire repository
           path: '.'
+
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v5
