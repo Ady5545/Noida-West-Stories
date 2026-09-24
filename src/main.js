@@ -21,7 +21,7 @@ const blockSpan=64;
 
 let started=false,inCar=false,cameraMode='third';
 let timeOfDay=8;
-let playerYaw=0,playerPitch=-0.08;
+let playerYaw=0;
 let carSpeed=0,carHeading=Math.PI*.5;
 let toastTimer=0;
 let mapReady=false;
@@ -100,6 +100,7 @@ async function loadRealMap(){
       car.rotation.y=carHeading;
       player.position.set(nearest.midpoint.x-2.8,0,nearest.midpoint.z+1.5);
       playerYaw=carHeading;
+      player.rotation.y=playerYaw;
     }
 
     ui.startButton.disabled=false;
@@ -173,19 +174,19 @@ function enterExit(){
 
 function updatePlayer(dt){
   if(inCar)return;
+
+  const turnSpeed=2.35;
+  if(keysDown('KeyA'))playerYaw+=turnSpeed*dt;
+  if(keysDown('KeyD'))playerYaw-=turnSpeed*dt;
+
+  player.rotation.y=playerYaw;
+
   const forward=new THREE.Vector3(Math.sin(playerYaw),0,-Math.cos(playerYaw));
-  const right=new THREE.Vector3(Math.cos(playerYaw),0,Math.sin(playerYaw));
-  const dir=new THREE.Vector3();
-  if(keysDown('KeyW'))dir.add(forward);
-  if(keysDown('KeyS'))dir.sub(forward);
-  if(keysDown('KeyD'))dir.add(right);
-  if(keysDown('KeyA'))dir.sub(right);
-  if(dir.lengthSq()>0){
-    dir.normalize();
-    const speed=(keysDown('ShiftLeft')||keysDown('ShiftRight'))?10:5.7;
-    player.position.addScaledVector(dir,speed*dt);
-    player.rotation.y=playerYaw;
-  }
+  const speed=(keysDown('ShiftLeft')||keysDown('ShiftRight'))?10:5.7;
+
+  if(keysDown('KeyW'))player.position.addScaledVector(forward,speed*dt);
+  if(keysDown('KeyS'))player.position.addScaledVector(forward,-speed*.65*dt);
+
   player.position.x=THREE.MathUtils.clamp(player.position.x,mapBounds.minX+2,mapBounds.maxX-2);
   player.position.z=THREE.MathUtils.clamp(player.position.z,mapBounds.minZ+2,mapBounds.maxZ-2);
 }
@@ -236,20 +237,29 @@ function updateTraffic(dt){
 }
 
 function updateCamera(){
-  const target=inCar?car.position.clone().add(new THREE.Vector3(0,.7,0)):player.position.clone().add(new THREE.Vector3(0,1.25,0));
+  const heading=inCar?carHeading:playerYaw;
+  const target=inCar
+    ? car.position.clone().add(new THREE.Vector3(0,.9,0))
+    : player.position.clone().add(new THREE.Vector3(0,1.15,0));
+
+  const forward=new THREE.Vector3(Math.sin(heading),0,-Math.cos(heading));
+
   if(cameraMode==='first'){
-    const heading=inCar?carHeading:playerYaw;
-    const forward=new THREE.Vector3(Math.sin(heading),0,-Math.cos(heading));
-    const pos=target.clone().add(new THREE.Vector3(0,inCar?1.45:.95,0));
-    const look=pos.clone().addScaledVector(forward,12);
-    look.y+=Math.tan(playerPitch)*4;
-    camera.position.lerp(pos,.2);camera.lookAt(look);
-  }else{
-    const heading=inCar?carHeading:playerYaw;
-    const back=new THREE.Vector3(-Math.sin(heading),0,Math.cos(heading));
-    const desired=target.clone().addScaledVector(back,inCar?8.5:5.6).add(new THREE.Vector3(0,inCar?3.2:2.7,0));
-    camera.position.lerp(desired,.12);camera.lookAt(target);
+    const pos=target.clone().add(new THREE.Vector3(0,inCar?1.05:.95,0));
+    camera.position.lerp(pos,.28);
+    camera.lookAt(pos.clone().addScaledVector(forward,18));
+    return;
   }
+
+  // Hard-follow style: the camera always settles directly behind the character/car.
+  const distance=inCar?8.5:6.2;
+  const height=inCar?3.25:3.0;
+  const desired=target.clone()
+    .addScaledVector(forward,-distance)
+    .add(new THREE.Vector3(0,height,0));
+
+  camera.position.lerp(desired,.2);
+  camera.lookAt(target);
 }
 
 function updateWorldClock(dt){
@@ -274,12 +284,6 @@ addEventListener('keydown',e=>{
 });
 addEventListener('keyup',e=>keys.delete(e.code));
 
-document.addEventListener('mousemove',e=>{
-  if(!started||document.pointerLockElement!==renderer.domElement)return;
-  const sensitivity=.0022;
-  playerYaw-=e.movementX*sensitivity;
-  playerPitch=THREE.MathUtils.clamp(playerPitch-e.movementY*sensitivity,-.9,.6);
-});
 
 ui.startButton.addEventListener('click',()=>{
   started=true;ui.start.classList.add('hidden');
