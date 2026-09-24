@@ -408,7 +408,7 @@ function animate(){
   requestAnimationFrame(animate);
   const dt=Math.min(gameClock.getDelta(),.04);
   if(started){
-    updatePlayer(dt);updateCar(dt);updateNPCs(dt);updateTraffic(dt);updateCamera();updateWorldClock(dt);interactionHint();
+    updatePlayer(dt);updateCar(dt);updateNPCs(dt);updateTraffic(dt);updateCamera(dt);updateWorldClock(dt);interactionHint();
     if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)ui.toast.classList.add('hidden');}
   }else{camera.position.set(56,50,56);camera.lookAt(0,0,0);}
   renderer.render(scene,camera);
