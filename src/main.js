@@ -1,4 +1,4 @@
-import { loadOSMRoadNetwork } from './osm.js';
+import { loadBundledOSMRoadNetwork, loadOSMRoadNetwork } from './osm.js';
 import * as THREE from 'three';
 
 const scene=new THREE.Scene();
@@ -67,7 +67,7 @@ function tree(x,z){
   crown.position.set(x,4.8,z);crown.castShadow=true;scene.add(crown);
 }
 
-box(560,1,560,0x6b756f,0,-.5,0);
+box(12000,1,12000,0x6b756f,0,-.5,0);
 
 function createFallbackGrid(){
   const blockSpan=64,roadWidth=12;
@@ -84,7 +84,7 @@ async function loadRealMap(){
   ui.startButton.disabled=false;
   ui.startButton.textContent='LOADING MAP…';
   try{
-    const road=await loadOSMRoadNetwork();
+    const road=await loadBundledOSMRoadNetwork();
     scene.add(road.group);
     mapSegments=road.segments;
     mapBounds=road.bounds;
@@ -106,13 +106,35 @@ async function loadRealMap(){
     ui.startButton.disabled=false;
     if(!started) ui.startButton.textContent='ENTER THE CITY';
     document.querySelector('.start-note').textContent='Real OpenStreetMap road network loaded · Keyboard + mouse recommended';
-  }catch(error){
-    console.warn('OpenStreetMap load failed, using fallback map:',error);
-    createFallbackGrid();
-    mapReady=true;
-    ui.startButton.disabled=false;
-    if(!started) ui.startButton.textContent='ENTER THE CITY';
-    document.querySelector('.start-note').textContent='Map service unavailable · fallback city loaded';
+  }catch(bundledError){
+    console.warn('Bundled OpenStreetMap map failed:',bundledError);
+    try{
+      const road=await loadOSMRoadNetwork();
+      scene.add(road.group);
+      mapSegments=road.segments;
+      mapBounds=road.bounds;
+      mapReady=true;
+
+      const nearest=road.segments.slice().sort((a,b)=>a.midpoint.lengthSq()-b.midpoint.lengthSq())[0];
+      if(nearest && !started){
+        car.position.set(nearest.midpoint.x,.66,nearest.midpoint.z);
+        carHeading=nearest.heading;
+        car.rotation.y=carHeading;
+        player.position.set(nearest.midpoint.x-2.8,0,nearest.midpoint.z+1.5);
+        playerYaw=carHeading;
+        player.rotation.y=playerYaw;
+      }
+      ui.startButton.disabled=false;
+      if(!started) ui.startButton.textContent='ENTER THE CITY';
+      document.querySelector('.start-note').textContent='Live OpenStreetMap road network loaded · Keyboard + mouse recommended';
+    }catch(error){
+      console.warn('OpenStreetMap load failed, using fallback map:',error);
+      createFallbackGrid();
+      mapReady=true;
+      ui.startButton.disabled=false;
+      if(!started) ui.startButton.textContent='ENTER THE CITY';
+      document.querySelector('.start-note').textContent='Map service unavailable · fallback city loaded';
+    }
   }
 }
 
