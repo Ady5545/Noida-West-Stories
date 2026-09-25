@@ -24,25 +24,28 @@ let started=false,inCar=false,cameraMode='third';
 let timeOfDay=8;
 let playerYaw=0;
 
-// Third-person camera state: direct drag controls the orbit, then a small amount
-// of inertia/follow spring keeps the camera feeling weighty rather than locked.
+// Third-person camera state.
+// Pointer Lock provides continuous touchpad/mouse deltas for look input.
+// The target angles are smoothed into the rendered camera so the response
+// feels weighty without losing direct control.
 let cameraYaw=0;
 let cameraPitch=-0.18;
-let cameraDistanceTarget=6.4;
-let cameraDistance=6.4;
+let cameraYawTarget=0;
+let cameraPitchTarget=-0.18;
+let cameraDistanceTarget=6.35;
+let cameraDistance=6.35;
 let cameraZoomOffset=0;
 let cameraYawVelocity=0;
 let cameraPitchVelocity=0;
 let lastCameraInput=0;
-let cameraDragging=false;
-let cameraPointerId=null;
-let cameraLastPointerX=0;
-let cameraLastPointerY=0;
+let pointerLocked=false;
+let aiming=false;
 let cameraFollowPivot=new THREE.Vector3();
 let cameraRaycaster=new THREE.Raycaster();
-const cameraDragSensitivity=.007;
-const cameraPitchSensitivity=.0062;
-const cameraShoulderOffset=.72;
+const cameraCollisionMeshes=[];
+const cameraLookSensitivity=.0026;
+const cameraPitchSensitivity=.0022;
+const cameraShoulderOffset=.68;
 const locomotionClock=new THREE.Clock();
 let locomotionTime=0;
 let playerVelocity=new THREE.Vector3();
@@ -112,11 +115,13 @@ async function loadRealMap(){
     try{
       const buildings=await loadBundledOSMBuildingNetwork();
       scene.add(buildings.group);
+      registerCameraCollisionGroup(buildings.group);
     }catch(buildingBundleError){
       console.warn('Bundled building data unavailable; loading live OSM buildings:',buildingBundleError);
       try{
         const buildings=await loadOSMBuildingNetwork();
         scene.add(buildings.group);
+        registerCameraCollisionGroup(buildings.group);
       }catch(buildingError){
         console.warn('Live OSM building data unavailable:',buildingError);
       }
@@ -394,6 +399,28 @@ function shortestAngleDelta(from,to){
   return THREE.MathUtils.euclideanModulo(to-from+Math.PI,Math.PI*2)-Math.PI;
 }
 
+function registerCameraCollisionGroup(group){
+  if(!group)return;
+  group.traverse(o=>{
+    if(o.isMesh)cameraCollisionMeshes.push(o);
+  });
+}
+
+function requestGamePointerLock(){
+  if(!started||pointerLocked)return;
+  if(!renderer.domElement.requestPointerLock)return;
+  try{
+    const result=renderer.domElement.requestPointerLock({unadjustedMovement:true});
+    if(result&&typeof result.catch==='function'){
+      result.catch(()=>{
+        try{renderer.domElement.requestPointerLock();}catch{}
+      });
+    }
+  }catch{
+    try{renderer.domElement.requestPointerLock();}catch{}
+  }
+}
+
 function cameraObstructionDistance(target,desired){
   const offset=desired.clone().sub(target);
   const distance=offset.length();
@@ -402,7 +429,12 @@ function cameraObstructionDistance(target,desired){
   const direction=offset.clone().normalize();
   cameraRaycaster.set(target,direction);
 
-  const blocked=cameraRaycaster.intersectObjects(scene.children,true).find(hit=>{
+  const hits=cameraRaycaster.intersectObjects(
+    cameraCollisionMeshes.length?cameraCollisionMeshes:scene.children,
+    true
+  );
+
+  const blocked=hits.find(hit=>{
     let o=hit.object;
     while(o){
       if(o===player||o===car||o.userData.ignoreCamera)return false;
@@ -412,56 +444,62 @@ function cameraObstructionDistance(target,desired){
   });
 
   if(!blocked||blocked.distance>=distance)return distance;
-  return Math.max(1.1,blocked.distance-.2);
+
+  // Pull the camera in front of the wall/obstacle and let the normal
+  // follow interpolation do the visual smoothing.
+  return Math.max(1.05,blocked.distance-.22);
 }
 
 function updateCamera(dt){
-  // The follow target is ALWAYS the character (or current vehicle). This is the
-  // core "camera follows character" rule: the orbit is an offset around a live
-  // target, rather than a separate world-space point that can drift away.
   const followTarget=inCar
-    ? car.position.clone().add(new THREE.Vector3(0,1.0,0))
-    : player.position.clone().add(new THREE.Vector3(0,1.15,0));
+    ? car.position.clone().add(new THREE.Vector3(0,1.02,0))
+    : player.position.clone().add(new THREE.Vector3(0,1.12,0));
 
-  if(cameraFollowPivot.lengthSq()===0)cameraFollowPivot.copy(followTarget);
-
-  // Small positional lag gives weight, but the target remains the player.
-  const followSharpness=inCar?13.5:12;
+  // The character is always the authoritative target.
   cameraFollowPivot.lerp(
     followTarget,
-    1-Math.exp(-followSharpness*dt)
+    1-Math.exp(-(inCar?15:13)*dt)
   );
 
   const moving=inCar
     ? Math.abs(carSpeed)>2.5
     : playerMoveSpeed>.25;
 
-  const sinceLook=performance.now()/1000-lastCameraInput;
+  const now=performance.now()/1000;
+  const sinceLook=now-lastCameraInput;
 
-  // When the player is moving and not manually looking around, the camera
-  // gradually follows the direction of travel. Manual drag always wins.
-  if(!cameraDragging&&moving&&sinceLook>.7){
+  // Auto-centre only when the user has stopped looking around.
+  if(!pointerLocked&&!aiming){
+    // No manual look input: the camera may settle behind movement.
+  }
+
+  if(!aiming&&moving&&sinceLook>.72){
     const movementHeading=inCar
       ? carHeading
       : Math.atan2(playerVelocity.x,-playerVelocity.z);
 
-    const delta=shortestAngleDelta(cameraYaw,movementHeading);
-    const recenterRate=inCar?3.6:3.0;
-    cameraYaw+=delta*(1-Math.exp(-recenterRate*dt));
+    const delta=shortestAngleDelta(cameraYawTarget,movementHeading);
+    const recenterRate=inCar?3.7:3.1;
+    cameraYawTarget+=delta*(1-Math.exp(-recenterRate*dt));
   }
 
-  // Camera inertia only acts after the player lets go of the orbit.
-  if(!cameraDragging){
-    cameraYaw+=cameraYawVelocity*dt;
-    cameraPitch+=cameraPitchVelocity*dt;
-    cameraYawVelocity*=Math.exp(-8.8*dt);
-    cameraPitchVelocity*=Math.exp(-9.5*dt);
-  }else{
-    cameraYawVelocity*=Math.exp(-18*dt);
-    cameraPitchVelocity*=Math.exp(-18*dt);
+  // Smooth the pointer-lock target into the actual rendered orbit.
+  const yawDelta=shortestAngleDelta(cameraYaw,cameraYawTarget);
+  cameraYaw+=yawDelta*(1-Math.exp(-18*dt));
+  cameraPitch+=(
+    cameraPitchTarget-cameraPitch
+  )*(1-Math.exp(-18*dt));
+
+  // Tiny post-release inertia.
+  if(!pointerLocked){
+    cameraYawTarget+=cameraYawVelocity*dt;
+    cameraPitchTarget+=cameraPitchVelocity*dt;
+    cameraYawVelocity*=Math.exp(-8.5*dt);
+    cameraPitchVelocity*=Math.exp(-9*dt);
   }
 
-  cameraPitch=THREE.MathUtils.clamp(cameraPitch,-0.78,.38);
+  cameraPitch=THREE.MathUtils.clamp(cameraPitch,-0.78,.95);
+  cameraPitchTarget=THREE.MathUtils.clamp(cameraPitchTarget,-0.78,.95);
 
   if(cameraMode==='first'){
     const lookDirection=new THREE.Vector3(
@@ -470,40 +508,41 @@ function updateCamera(dt){
       -Math.cos(cameraYaw)*Math.cos(cameraPitch)
     ).normalize();
 
-    const desiredFirst=followTarget.clone().add(
+    const firstPersonPosition=followTarget.clone().add(
       new THREE.Vector3(0,inCar?1.0:.82,0)
     );
 
-    camera.position.lerp(desiredFirst,1-Math.exp(-18*dt));
-    camera.lookAt(
-      desiredFirst.clone().addScaledVector(lookDirection,18)
+    camera.position.lerp(
+      firstPersonPosition,
+      1-Math.exp(-20*dt)
     );
-
-    camera.fov=68;
+    camera.lookAt(
+      firstPersonPosition.clone().addScaledVector(lookDirection,20)
+    );
+    camera.fov=aiming?57:68;
     camera.updateProjectionMatrix();
     return;
   }
 
-  // GTA-style orbit: one clean spherical offset around the live character.
   const speed01=THREE.MathUtils.clamp(Math.abs(carSpeed)/28,0,1);
-  const baseDistance=inCar?8.15:6.35;
-  const speedExtension=inCar?2.2*speed01:0;
+  const baseDistance=inCar?8.2:6.35;
+  const normalSpeedExtension=inCar?2.2*speed01:0;
+  const aimDistance=inCar?5.9:4.65;
+  const desiredDistance=aiming
+    ? aimDistance
+    : baseDistance+normalSpeedExtension+cameraZoomOffset;
 
-  const minDistance=inCar?5.0:3.5;
+  const minDistance=inCar?4.8:3.35;
   const maxDistance=inCar?12.5:9.5;
-  const desiredDistance=THREE.MathUtils.clamp(
-    baseDistance+speedExtension+cameraZoomOffset,
+
+  cameraDistanceTarget=THREE.MathUtils.clamp(
+    desiredDistance,
     minDistance,
     maxDistance
   );
-
-  cameraDistanceTarget+=(
-    desiredDistance-cameraDistanceTarget
-  )*(1-Math.exp(-5.5*dt));
-
   cameraDistance+=(
     cameraDistanceTarget-cameraDistance
-  )*(1-Math.exp(-8*dt));
+  )*(1-Math.exp(-8.5*dt));
 
   const horizontal=Math.cos(cameraPitch);
   const orbitDirection=new THREE.Vector3(
@@ -513,21 +552,24 @@ function updateCamera(dt){
   ).normalize();
 
   const cameraRight=new THREE.Vector3(
-    Math.cos(cameraYaw),0,Math.sin(cameraYaw)
+    Math.cos(cameraYaw),
+    0,
+    Math.sin(cameraYaw)
   );
 
-  // Small shoulder offset, relative to the CURRENT camera orbit.
-  const shoulderAmount=(inCar?0.82:.68);
+  const shoulderAmount=aiming
+    ? (inCar?.96:.88)
+    : (inCar?.82:cameraShoulderOffset);
+
   const shoulderOffset=cameraRight.multiplyScalar(shoulderAmount);
 
-  // Follow the character first; then apply the orbit offset.
   const desiredCameraPosition=
     cameraFollowPivot.clone()
       .add(shoulderOffset)
       .addScaledVector(orbitDirection,-cameraDistance);
 
   const collisionTarget=cameraFollowPivot.clone().add(
-    new THREE.Vector3(0,.12,0)
+    new THREE.Vector3(0,.1,0)
   );
 
   const allowedDistance=cameraObstructionDistance(
@@ -540,30 +582,28 @@ function updateCamera(dt){
       .add(shoulderOffset)
       .addScaledVector(orbitDirection,-allowedDistance);
 
-  // Keep the camera above the character's feet/ground plane.
   collisionPosition.y=Math.max(
     collisionPosition.y,
-    cameraFollowPivot.y+.75
+    cameraFollowPivot.y+.72
   );
 
-  // This is the actual follow step.
   camera.position.lerp(
     collisionPosition,
-    1-Math.exp(-10.5*dt)
+    1-Math.exp(-11*dt)
   );
 
-  // Aim at the character, with only a tiny forward bias. Do NOT use a large
-  // velocity lead here; the character is the thing being followed.
+  // Keep the player as the focus, with a restrained aim bias.
   const lookTarget=cameraFollowPivot.clone().add(
-    new THREE.Vector3(0,inCar ? .32 : .12,0)
+    new THREE.Vector3(0,aiming?.26:.12,0)
   );
 
   camera.lookAt(lookTarget);
 
-  const targetFov=68+(inCar?10.5*speed01:0);
+  const normalFov=68+(inCar?10.5*speed01:0);
+  const targetFov=aiming?55:normalFov;
   camera.fov+=(
     targetFov-camera.fov
-  )*(1-Math.exp(-4.5*dt));
+  )*(1-Math.exp(-8*dt));
   camera.updateProjectionMatrix();
 }
 
@@ -590,87 +630,95 @@ addEventListener('keydown',e=>{
 addEventListener('keyup',e=>keys.delete(e.code));
 
 
-renderer.domElement.addEventListener('pointerdown',e=>{
-  if(!started||e.button!==0)return;
-  cameraDragging=true;
-  cameraPointerId=e.pointerId;
-  cameraLastPointerX=e.clientX;
-  cameraLastPointerY=e.clientY;
-  lastCameraInput=performance.now()/1000;
-  renderer.domElement.classList.add('camera-dragging');
-  renderer.domElement.setPointerCapture?.(e.pointerId);
-  e.preventDefault();
+document.addEventListener('contextmenu',e=>{
+  if(started)e.preventDefault();
 });
 
-renderer.domElement.addEventListener('pointermove',e=>{
-  if(!started||!cameraDragging||e.pointerId!==cameraPointerId)return;
-
-  const dx=e.clientX-cameraLastPointerX;
-  const dy=e.clientY-cameraLastPointerY;
-  cameraLastPointerX=e.clientX;
-  cameraLastPointerY=e.clientY;
-
-  // Direct manipulation: drag right -> look right, drag left -> look left.
-  cameraYaw+=dx*cameraDragSensitivity;
-  cameraPitch=THREE.MathUtils.clamp(
-    cameraPitch-dy*cameraPitchSensitivity,
-    -0.72,.38
-  );
-
-  const dt=.016;
-  cameraYawVelocity=THREE.MathUtils.clamp(
-    THREE.MathUtils.lerp(cameraYawVelocity,dx*cameraDragSensitivity/dt,.34),
-    -7,7
-  );
-  cameraPitchVelocity=THREE.MathUtils.clamp(
-    THREE.MathUtils.lerp(cameraPitchVelocity,-dy*cameraPitchSensitivity/dt,.34),
-    -4,4
-  );
-
-  lastCameraInput=performance.now()/1000;
-  e.preventDefault();
-});
-
-function stopCameraDrag(e){
-  if(!cameraDragging||e.pointerId!==cameraPointerId)return;
-  cameraDragging=false;
-  renderer.domElement.classList.remove('camera-dragging');
-  renderer.domElement.releasePointerCapture?.(e.pointerId);
-  cameraPointerId=null;
-  lastCameraInput=performance.now()/1000;
-}
-
-renderer.domElement.addEventListener('pointerup',stopCameraDrag);
-renderer.domElement.addEventListener('pointercancel',stopCameraDrag);
-renderer.domElement.addEventListener('lostpointercapture',e=>{
-  if(cameraPointerId===e.pointerId){
-    cameraDragging=false;
-    renderer.domElement.classList.remove('camera-dragging');
-    cameraPointerId=null;
+document.addEventListener('pointerlockchange',()=>{
+  pointerLocked=document.pointerLockElement===renderer.domElement;
+  if(pointerLocked){
+    lastCameraInput=performance.now()/1000;
+    renderer.domElement.classList.add('pointer-locked');
+  }else{
+    renderer.domElement.classList.remove('pointer-locked');
+    aiming=false;
   }
 });
 
-renderer.domElement.addEventListener('wheel',e=>{
-  if(!started||cameraMode==='first')return;
-  const zoom=e.deltaY>0?1:-1;
-  cameraZoomOffset=THREE.MathUtils.clamp(
-    cameraZoomOffset+zoom*.7,
-    (inCar?5.2:3.4)-(inCar?8.1:6.4),
-    (inCar?12.5:9.5)-(inCar?8.1:6.4)
+document.addEventListener('pointerlockerror',()=>{
+  pointerLocked=false;
+  renderer.domElement.classList.remove('pointer-locked');
+});
+
+document.addEventListener('mousemove',e=>{
+  if(!started||!pointerLocked)return;
+
+  const dx=Number.isFinite(e.movementX)?e.movementX:0;
+  const dy=Number.isFinite(e.movementY)?e.movementY:0;
+
+  // Direct continuous look:
+  // touchpad/finger right -> look right
+  // touchpad/finger left  -> look left
+  cameraYawTarget+=dx*cameraLookSensitivity;
+  cameraPitchTarget=THREE.MathUtils.clamp(
+    cameraPitchTarget-dy*cameraPitchSensitivity,
+    -0.78,.95
   );
+
+  // Track the last input so auto-recentering knows the user is looking.
   lastCameraInput=performance.now()/1000;
-  e.preventDefault();
-},{passive:false});
+
+  // Small release momentum.
+  cameraYawVelocity=THREE.MathUtils.clamp(dx*.00045,-.18,.18);
+  cameraPitchVelocity=THREE.MathUtils.clamp(-dy*.00035,-.12,.12);
+});
+
+renderer.domElement.addEventListener('mousedown',e=>{
+  if(!started)return;
+
+  // Left click requests Pointer Lock. Once locked, the cursor no longer
+  // constrains the camera at the edge of the screen.
+  if(e.button===0){
+    requestGamePointerLock();
+    return;
+  }
+
+  // Right click = smooth GTA-style aim/zoom state.
+  if(e.button===2){
+    aiming=true;
+    lastCameraInput=performance.now()/1000;
+    e.preventDefault();
+  }
+});
+
+renderer.domElement.addEventListener('mouseup',e=>{
+  if(e.button===2){
+    aiming=false;
+    lastCameraInput=performance.now()/1000;
+  }
+});
+
+renderer.domElement.addEventListener('mouseleave',()=>{
+  if(!pointerLocked)aiming=false;
+});
 
 ui.startButton.addEventListener('click',()=>{
   started=true;
   ui.start.classList.add('hidden');
   cameraFollowPivot.copy(
-    inCar
-      ? car.position.clone().add(new THREE.Vector3(0,1.05,0))
-      : player.position.clone().add(new THREE.Vector3(0,1.18,0))
+    player.position.clone().add(new THREE.Vector3(0,1.12,0))
   );
-  toast('Drag to look around · W A S D to move');
+  cameraYawTarget=playerYaw;
+  cameraYaw=playerYaw;
+  cameraPitchTarget=-0.18;
+  lastCameraInput=performance.now()/1000;
+
+  requestGamePointerLock();
+  toast('Move the trackpad to look · Right click to aim');
+});
+
+renderer.domElement.addEventListener('click',()=>{
+  if(started&&!pointerLocked)requestGamePointerLock();
 });
 
 addEventListener('resize',()=>{
