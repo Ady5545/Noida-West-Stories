@@ -555,7 +555,7 @@ function updateCamera(dt){
   // Aim at the character, with only a tiny forward bias. Do NOT use a large
   // velocity lead here; the character is the thing being followed.
   const lookTarget=cameraFollowPivot.clone().add(
-    new THREE.Vector3(0,inCar?.32:.12,0)
+    new THREE.Vector3(0,inCar ? .32 : .12,0)
   );
 
   camera.lookAt(lookTarget);
