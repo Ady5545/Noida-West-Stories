@@ -558,8 +558,8 @@ function updateCamera(dt){
   );
 
   const shoulderAmount=aiming
-    ? (inCar?.96:.88)
-    : (inCar?.82:cameraShoulderOffset);
+    ? (inCar ? .96 : .88)
+    : (inCar ? .82 : cameraShoulderOffset);
 
   const shoulderOffset=cameraRight.multiplyScalar(shoulderAmount);
 
@@ -594,7 +594,7 @@ function updateCamera(dt){
 
   // Keep the player as the focus, with a restrained aim bias.
   const lookTarget=cameraFollowPivot.clone().add(
-    new THREE.Vector3(0,aiming?.26:.12,0)
+    new THREE.Vector3(0,aiming ? .26 : .12,0)
   );
 
   camera.lookAt(lookTarget);
