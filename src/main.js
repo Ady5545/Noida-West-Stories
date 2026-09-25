@@ -43,6 +43,9 @@ let cameraRaycaster=new THREE.Raycaster();
 const cameraDragSensitivity=.007;
 const cameraPitchSensitivity=.0062;
 const cameraShoulderOffset=.72;
+let playerVelocity=new THREE.Vector3();
+let playerMoveInput=new THREE.Vector3();
+let playerMoveSpeed=0;
 let carSpeed=0,carHeading=Math.PI*.5;
 let toastTimer=0;
 let mapReady=false;
@@ -226,33 +229,73 @@ function enterExit(){
 }
 
 function updatePlayer(dt){
-  if(inCar)return;
-
-  const forward=new THREE.Vector3(Math.sin(cameraYaw),0,-Math.cos(cameraYaw));
-  const right=new THREE.Vector3(Math.cos(cameraYaw),0,Math.sin(cameraYaw));
-  const move=new THREE.Vector3();
-
-  if(keysDown('KeyW'))move.add(forward);
-  if(keysDown('KeyS'))move.sub(forward);
-  if(keysDown('KeyD'))move.add(right);
-  if(keysDown('KeyA'))move.sub(right);
-
-  if(move.lengthSq()>0){
-    move.normalize();
-    const speed=(keysDown('ShiftLeft')||keysDown('ShiftRight'))?10:5.7;
-    player.position.addScaledVector(move,speed*dt);
-
-    // Character turns toward travel direction; camera remains independently orbitable.
-    const desiredHeading=Math.atan2(move.x,-move.z);
-    const delta=THREE.MathUtils.euclideanModulo(desiredHeading-playerYaw+Math.PI,Math.PI*2)-Math.PI;
-    playerYaw+=delta*Math.min(1,dt*10);
-    player.rotation.y=playerYaw;
+  if(inCar){
+    playerVelocity.set(0,0,0);
+    playerMoveSpeed=0;
+    return;
   }
 
-  player.position.x=THREE.MathUtils.clamp(player.position.x,mapBounds.minX+2,mapBounds.maxX-2);
-  player.position.z=THREE.MathUtils.clamp(player.position.z,mapBounds.minZ+2,mapBounds.maxZ-2);
-}
-function updateCar(dt){
+  // Camera-relative movement, with acceleration/deceleration so the character
+  // feels like a controllable third-person action-game avatar instead of a
+  // position being teleported by the keys.
+  const forward=new THREE.Vector3(
+    Math.sin(cameraYaw),0,-Math.cos(cameraYaw)
+  );
+  const right=new THREE.Vector3(
+    Math.cos(cameraYaw),0,Math.sin(cameraYaw)
+  );
+
+  playerMoveInput.set(0,0,0);
+  if(keysDown('KeyW'))playerMoveInput.add(forward);
+  if(keysDown('KeyS'))playerMoveInput.sub(forward);
+  if(keysDown('KeyD'))playerMoveInput.add(right);
+  if(keysDown('KeyA'))playerMoveInput.sub(right);
+
+  const hasInput=playerMoveInput.lengthSq()>0;
+  if(hasInput)playerMoveInput.normalize();
+
+  const sprinting=keysDown('ShiftLeft')||keysDown('ShiftRight');
+  const targetSpeed=sprinting?9.6:5.8;
+  const acceleration=hasInput?(sprinting?25:22):18;
+  const braking=hasInput?10:24;
+
+  const targetVelocity=playerMoveInput.clone().multiplyScalar(
+    hasInput?targetSpeed:0
+  );
+
+  const response=hasInput?acceleration:braking;
+  const blend=1-Math.exp(-response*dt);
+  playerVelocity.lerp(targetVelocity,blend);
+
+  const maxSpeed=targetSpeed*1.05;
+  const horizontalSpeed=Math.hypot(playerVelocity.x,playerVelocity.z);
+  if(horizontalSpeed>maxSpeed){
+    playerVelocity.multiplyScalar(maxSpeed/horizontalSpeed);
+  }
+
+  player.position.addScaledVector(playerVelocity,dt);
+
+  // Smoothly face the direction of actual travel. This means strafing still
+  // feels natural, while forward movement turns the character into its path.
+  const travelSpeed=Math.hypot(playerVelocity.x,playerVelocity.z);
+  if(travelSpeed>.12){
+    const desiredHeading=Math.atan2(playerVelocity.x,-playerVelocity.z);
+    const delta=shortestAngleDelta(playerYaw,desiredHeading);
+    const turnRate=sprinting?11.5:10.0;
+    playerYaw+=delta*(1-Math.exp(-turnRate*dt));
+    player.rotation.y=playerYaw;
+    playerMoveSpeed=travelSpeed;
+  }else{
+    playerMoveSpeed=0;
+  }
+
+  player.position.x=THREE.MathUtils.clamp(
+    player.position.x,mapBounds.minX+2,mapBounds.maxX-2
+  );
+  player.position.z=THREE.MathUtils.clamp(
+    player.position.z,mapBounds.minZ+2,mapBounds.maxZ-2
+  );
+}function updateCar(dt){
   if(!inCar){carSpeed*=Math.pow(.25,dt);return;}
 
   const throttle=keysDown('KeyW')?1:keysDown('KeyS')?-1:0;
@@ -337,7 +380,7 @@ function updateCamera(dt){
 
   const moving=inCar
     ? Math.abs(carSpeed)>2.5
-    : (keysDown('KeyW')||keysDown('KeyS')||keysDown('KeyA')||keysDown('KeyD'));
+    : playerMoveSpeed>.35;
 
   const now=performance.now()/1000;
   const sinceLook=now-lastCameraInput;
@@ -345,7 +388,11 @@ function updateCamera(dt){
   // GTA-inspired soft auto-recenter: only after the player/car has been moving
   // for a moment and the player has stopped actively orbiting.
   if(!cameraDragging && moving && sinceLook>1.05){
-    const facing=inCar?carHeading:playerYaw;
+    const facing=inCar
+      ? carHeading
+      : (playerMoveSpeed>.35
+          ? Math.atan2(playerVelocity.x,-playerVelocity.z)
+          : playerYaw);
     const delta=shortestAngleDelta(cameraYaw,facing);
     const rate=inCar?3.2:2.25;
     cameraYaw+=delta*(1-Math.exp(-rate*dt));
