@@ -468,11 +468,9 @@ function updateCamera(dt){
   const now=performance.now()/1000;
   const sinceLook=now-lastCameraInput;
 
-  // Auto-centre only when the user has stopped looking around.
-  if(!pointerLocked&&!aiming){
-    // No manual look input: the camera may settle behind movement.
-  }
-
+  // Auto-centre only after the player's look input has been idle.
+  // Pointer Lock itself does not disable recentering; actual look activity
+  // resets lastCameraInput, so manual camera control always wins.
   if(!aiming&&moving&&sinceLook>.72){
     const movementHeading=inCar
       ? carHeading
