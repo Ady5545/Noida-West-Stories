@@ -39,10 +39,13 @@ let cameraPointerId=null;
 let cameraLastPointerX=0;
 let cameraLastPointerY=0;
 let cameraFollowPivot=new THREE.Vector3();
+let cameraVelocityLead=new THREE.Vector3();
 let cameraRaycaster=new THREE.Raycaster();
 const cameraDragSensitivity=.007;
 const cameraPitchSensitivity=.0062;
 const cameraShoulderOffset=.72;
+const locomotionClock=new THREE.Clock();
+let locomotionTime=0;
 let playerVelocity=new THREE.Vector3();
 let playerMoveInput=new THREE.Vector3();
 let playerMoveSpeed=0;
@@ -295,7 +298,50 @@ function updatePlayer(dt){
   player.position.z=THREE.MathUtils.clamp(
     player.position.z,mapBounds.minZ+2,mapBounds.maxZ-2
   );
-}function updateCar(dt){
+}function animatePlayerLocomotion(dt){
+  const torso=player.getObjectByName('torso');
+  const head=player.getObjectByName('head');
+  const armL=player.getObjectByName('armL');
+  const armR=player.getObjectByName('armR');
+  const legL=player.getObjectByName('legL');
+  const legR=player.getObjectByName('legR');
+
+  const speed=playerMoveSpeed;
+  const normalized=THREE.MathUtils.clamp(speed/9.6,0,1);
+  if(speed>.12){
+    const strideRate=5.5+normalized*3.2;
+    locomotionTime+=dt*strideRate;
+    const swing=Math.sin(locomotionTime)*(.3+.28*normalized);
+    const opposite=-swing;
+
+    if(legL)legL.rotation.x=swing;
+    if(legR)legR.rotation.x=opposite;
+    if(armL)armL.rotation.x=opposite*.72;
+    if(armR)armR.rotation.x=swing*.72;
+
+    if(torso){
+      torso.position.y=1.28+Math.abs(Math.sin(locomotionTime*2))*(.018+.026*normalized);
+      torso.rotation.z=Math.sin(locomotionTime)*.018*normalized;
+    }
+    if(head){
+      head.position.y=2.02+Math.abs(Math.sin(locomotionTime*2))*.012;
+    }
+  }else{
+    locomotionTime*=Math.exp(-8*dt);
+    const settle=1-Math.exp(-10*dt);
+    if(legL)legL.rotation.x=THREE.MathUtils.lerp(legL.rotation.x,0,settle);
+    if(legR)legR.rotation.x=THREE.MathUtils.lerp(legR.rotation.x,0,settle);
+    if(armL)armL.rotation.x=THREE.MathUtils.lerp(armL.rotation.x,0,settle);
+    if(armR)armR.rotation.x=THREE.MathUtils.lerp(armR.rotation.x,0,settle);
+    if(torso){
+      torso.position.y=THREE.MathUtils.lerp(torso.position.y,1.28,settle);
+      torso.rotation.z=THREE.MathUtils.lerp(torso.rotation.z,0,settle);
+    }
+    if(head)head.position.y=THREE.MathUtils.lerp(head.position.y,2.02,settle);
+  }
+}
+
+function updateCar(dt){
   if(!inCar){carSpeed*=Math.pow(.25,dt);return;}
 
   const throttle=keysDown('KeyW')?1:keysDown('KeyS')?-1:0;
@@ -378,6 +424,14 @@ function updateCamera(dt){
   if(cameraFollowPivot.lengthSq()===0)cameraFollowPivot.copy(target);
   cameraFollowPivot.lerp(target,1-Math.exp(-(inCar?10.5:9)*dt));
 
+  const desiredLead=(
+    inCar
+      ? new THREE.Vector3(0,0,0)
+      : playerVelocity.clone().multiplyScalar(.18)
+  );
+  desiredLead.y=0;
+  cameraVelocityLead.lerp(desiredLead,1-Math.exp(-5.5*dt));
+
   const moving=inCar
     ? Math.abs(carSpeed)>2.5
     : playerMoveSpeed>.35;
@@ -452,6 +506,7 @@ function updateCamera(dt){
 
   const shoulder=cameraRight.clone().multiplyScalar(cameraShoulderOffset*(inCar?1.18:1));
   const desired=cameraFollowPivot.clone()
+    .add(cameraVelocityLead)
     .add(shoulder)
     .addScaledVector(viewDirection,-cameraDistance);
 
@@ -472,6 +527,7 @@ function updateCamera(dt){
   // Look slightly ahead of the character so the world opens up in the direction
   // of the orbit instead of staring at the exact center of the model.
   const lookTarget=cameraFollowPivot.clone()
+    .add(cameraVelocityLead.clone().multiplyScalar(.65))
     .add(new THREE.Vector3(0,inCar ? .35 : .1,0))
     .addScaledVector(viewDirection,2.4);
 
@@ -596,7 +652,7 @@ function animate(){
   requestAnimationFrame(animate);
   const dt=Math.min(gameClock.getDelta(),.04);
   if(started){
-    updatePlayer(dt);updateCar(dt);updateNPCs(dt);updateTraffic(dt);updateCamera(dt);updateWorldClock(dt);interactionHint();
+    updatePlayer(dt);animatePlayerLocomotion(dt);updateCar(dt);updateNPCs(dt);updateTraffic(dt);updateCamera(dt);updateWorldClock(dt);interactionHint();
     if(toastTimer>0){toastTimer-=dt;if(toastTimer<=0)ui.toast.classList.add('hidden');}
   }else{camera.position.set(56,50,56);camera.lookAt(0,0,0);}
   renderer.render(scene,camera);
