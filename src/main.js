@@ -581,8 +581,8 @@ renderer.domElement.addEventListener('pointermove',e=>{
   cameraLastPointerX=e.clientX;
   cameraLastPointerY=e.clientY;
 
-  // Direct manipulation: drag right -> camera orbits right, drag left -> left.
-  cameraYaw-=dx*cameraDragSensitivity;
+  // Direct manipulation: drag right -> look right, drag left -> look left.
+  cameraYaw+=dx*cameraDragSensitivity;
   cameraPitch=THREE.MathUtils.clamp(
     cameraPitch-dy*cameraPitchSensitivity,
     -0.72,.38
@@ -590,7 +590,7 @@ renderer.domElement.addEventListener('pointermove',e=>{
 
   const dt=.016;
   cameraYawVelocity=THREE.MathUtils.clamp(
-    THREE.MathUtils.lerp(cameraYawVelocity,-dx*cameraDragSensitivity/dt,.34),
+    THREE.MathUtils.lerp(cameraYawVelocity,dx*cameraDragSensitivity/dt,.34),
     -7,7
   );
   cameraPitchVelocity=THREE.MathUtils.clamp(
