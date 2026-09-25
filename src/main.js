@@ -40,6 +40,9 @@ let cameraPitchVelocity=0;
 let lastCameraInput=0;
 let pointerLocked=false;
 let aiming=false;
+let fallbackLookActive=false;
+let fallbackLookX=0;
+let fallbackLookY=0;
 let cameraFollowPivot=new THREE.Vector3();
 let cameraRaycaster=new THREE.Raycaster();
 const cameraCollisionMeshes=[];
@@ -654,26 +657,47 @@ document.addEventListener('pointerlockerror',()=>{
 });
 
 document.addEventListener('mousemove',e=>{
-  if(!started||!pointerLocked)return;
+  if(!started)return;
 
-  const dx=Number.isFinite(e.movementX)?e.movementX:0;
-  const dy=Number.isFinite(e.movementY)?e.movementY:0;
+  let dx=0;
+  let dy=0;
+
+  if(pointerLocked){
+    dx=Number.isFinite(e.movementX)?e.movementX:0;
+    dy=Number.isFinite(e.movementY)?e.movementY:0;
+  }else if(fallbackLookActive){
+    dx=e.clientX-fallbackLookX;
+    dy=e.clientY-fallbackLookY;
+    fallbackLookX=e.clientX;
+    fallbackLookY=e.clientY;
+  }else{
+    return;
+  }
 
   // Direct continuous look:
   // touchpad/finger right -> look right
-  // touchpad/finger left  -> look left
+  // touchpad/finger left  -> look left.
   cameraYawTarget+=dx*cameraLookSensitivity;
   cameraPitchTarget=THREE.MathUtils.clamp(
     cameraPitchTarget-dy*cameraPitchSensitivity,
     -0.78,.95
   );
 
-  // Track the last input so auto-recentering knows the user is looking.
   lastCameraInput=performance.now()/1000;
 
-  // Small release momentum.
   cameraYawVelocity=THREE.MathUtils.clamp(dx*.00045,-.18,.18);
   cameraPitchVelocity=THREE.MathUtils.clamp(-dy*.00035,-.12,.12);
+});
+
+renderer.domElement.addEventListener('mouseenter',e=>{
+  if(!started||pointerLocked)return;
+  fallbackLookX=e.clientX;
+  fallbackLookY=e.clientY;
+  fallbackLookActive=true;
+});
+
+renderer.domElement.addEventListener('mouseleave',()=>{
+  fallbackLookActive=false;
 });
 
 renderer.domElement.addEventListener('mousedown',e=>{
