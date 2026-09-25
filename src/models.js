@@ -104,9 +104,11 @@ export function createPedestrian(seed=0){
   const skinMat=mat(skin,1,0),shirtMat=mat(shirt,1,0),pantsMat=mat(pants,1,0),shoeMat=mat(0x171a1d,.95,0);
 
   const torso=new THREE.Mesh(new THREE.BoxGeometry(.58,.88,.34),shirtMat);
+  torso.name='torso';
   torso.position.y=1.28;g.add(torso);
 
   const head=new THREE.Mesh(new THREE.SphereGeometry(.28,16,12),skinMat);
+  head.name='head';
   head.position.y=2.02;g.add(head);
 
   const hair=new THREE.Mesh(new THREE.SphereGeometry(.285,16,8,0,Math.PI*2,0,Math.PI*.48),mat(0x2a221d,1,0));
@@ -135,12 +137,18 @@ export function createPedestrian(seed=0){
     ear.scale.set(.7,1,1);ear.position.set(x,2.01,-.01);g.add(ear);
   }
 
+  let armIndex=0;
   for(const x of[-.4,.4]){
     const arm=new THREE.Mesh(new THREE.CapsuleGeometry(.11,.55,5,8),shirtMat);
+    arm.name=armIndex===0?'armL':'armR';
+    armIndex++;
     arm.position.set(x,1.28,0);arm.rotation.z=x>0?-.08:.08;g.add(arm);
   }
+  let legIndex=0;
   for(const x of[-.17,.17]){
     const leg=new THREE.Mesh(new THREE.CapsuleGeometry(.12,.68,5,8),pantsMat);
+    leg.name=legIndex===0?'legL':'legR';
+    legIndex++;
     leg.position.set(x,.55,0);g.add(leg);
     const shoe=new THREE.Mesh(new THREE.BoxGeometry(.2,.12,.36),shoeMat);
     shoe.position.set(x,.12,-.07);g.add(shoe);
