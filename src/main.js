@@ -285,6 +285,11 @@ function updatePlayer(dt){
   // Smoothly face the direction of actual travel. This means strafing still
   // feels natural, while forward movement turns the character into its path.
   const travelSpeed=Math.hypot(playerVelocity.x,playerVelocity.z);
+  if(aiming&&pointerLocked){
+    const aimDelta=shortestAngleDelta(playerYaw,cameraYawTarget);
+    playerYaw+=aimDelta*(1-Math.exp(-14*dt));
+    player.rotation.y=playerYaw;
+  }
   if(travelSpeed>.12){
     const desiredHeading=Math.atan2(playerVelocity.x,-playerVelocity.z);
     const delta=shortestAngleDelta(playerYaw,desiredHeading);
